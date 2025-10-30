@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Returning to MCubed...</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .deep-link {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .instructions {
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h1>Returning to MCubed...</h1>
+        
+        <div class="instructions">
+            <p><strong>Thank you for your payment!</strong></p>
+            <p>We're attempting to return you to the MCubed app automatically.</p>
+        </div>
+
+        <div class="deep-link" id="deepLink">
+            Loading return link...
+        </div>
+
+        <button class="button" onclick="openDeepLink()">Open MCubed App</button>
+        <button class="button" onclick="copyLink()">Copy Link</button>
+
+        <div class="instructions">
+            <p><strong>If the app doesn't open:</strong></p>
+            <ol style="text-align: left;">
+                <li>Copy the link above</li>
+                <li>Paste it in your browser's address bar</li>
+                <li>The app will open automatically</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const pollUrl = urlParams.get('pollUrl') || '';
+        const userId = urlParams.get('userId') || '';
+        const amount = urlParams.get('amount') || '';
+
+        // Create deep link
+        const deepLink = `mcubed://paynow-return?pollUrl=${encodeURIComponent(pollUrl)}&userId=${encodeURIComponent(userId)}&amount=${encodeURIComponent(amount)}`;
+
+        // Display deep link
+        document.getElementById('deepLink').textContent = deepLink;
+
+        // Function to open deep link
+        function openDeepLink() {
+            window.location.href = deepLink;
+        }
+
+        // Function to copy link to clipboard
+        function copyLink() {
+            navigator.clipboard.writeText(deepLink).then(() => {
+                alert('Link copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = deepLink;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('Link copied to clipboard!');
+            });
+        }
+
+        // Auto-redirect after 2 seconds
+        setTimeout(() => {
+            openDeepLink();
+        }, 2000);
+
+        // Fallback: Check if user is still on this page after 5 seconds
+        setTimeout(() => {
+            if (document.visibilityState === 'visible') {
+                document.querySelector('.instructions').innerHTML += 
+                    '<p style="color: #ffcc00;"><strong>Auto-redirect failed.</strong> Please use the button above or copy the link manually.</p>';
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
