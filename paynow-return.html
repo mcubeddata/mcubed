@@ -37,15 +37,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .deep-link {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 14px;
-        }
         .button {
             background: white;
             color: #667eea;
@@ -67,6 +58,18 @@
             line-height: 1.6;
             margin: 20px 0;
         }
+        .error {
+            color: #ffcc00;
+            background: rgba(255, 204, 0, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 204, 0, 0.3);
+        }
+        .loading {
+            color: #4CAF50;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -74,48 +77,179 @@
         <div class="spinner"></div>
         <h1>Returning to MCubed...</h1>
         
-        <div class="instructions">
+        <div id="loadingMessage" class="instructions loading">
+            <p><strong>Loading payment information...</strong></p>
+            <p>Please wait while we retrieve your payment details.</p>
+        </div>
+
+        <div id="paymentInfo" class="instructions" style="display: none;">
             <p><strong>Thank you for your payment!</strong></p>
-            <p>We're attempting to return you to the MCubed app automatically.</p>
+            <p>Opening the MCubed app automatically...</p>
         </div>
 
-        <div class="deep-link" id="deepLink">
-            Loading return link...
+        <button id="openButton" class="button" onclick="openDeepLink()" style="display: none;">Open MCubed App</button>
+        <button id="copyButton" class="button" onclick="copyLink()" style="display: none;">Copy Link</button>
+
+        <div id="errorMessage" class="error" style="display: none;">
+            <strong>Unable to open app automatically</strong><br>
+            Please install MCubed or use the buttons above.
         </div>
 
-        <button class="button" onclick="openDeepLink()">Open MCubed App</button>
-        <button class="button" onclick="copyLink()">Copy Link</button>
-
-        <div class="instructions">
+        <div id="fallbackInfo" class="instructions" style="display: none;">
             <p><strong>If the app doesn't open:</strong></p>
             <ol style="text-align: left;">
-                <li>Copy the link above</li>
-                <li>Paste it in your browser's address bar</li>
-                <li>The app will open automatically</li>
+                <li>Make sure MCubed is installed</li>
+                <li>Click "Open MCubed App" button</li>
+                <li>Or copy the link and paste in browser</li>
             </ol>
         </div>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    
     <script>
+        // Firebase configuration - You'll need to replace this with your actual config
+        // Get this from your Firebase project settings
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            var db = firebase.firestore();
+            console.log('Firebase initialized successfully');
+        } catch (error) {
+            console.error('Firebase initialization failed:', error);
+            var db = null;
+        }
+
+        let paymentData = null;
+        let deepLink = '';
+
         // Get URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const pollUrl = urlParams.get('pollUrl') || '';
-        const userId = urlParams.get('userId') || '';
-        const amount = urlParams.get('amount') || '';
+        function getUrlParameter(name) {
+            name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+            var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+            var results = regex.exec(location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
 
-        // Create deep link
-        const deepLink = `mcubed://paynow-return?pollUrl=${encodeURIComponent(pollUrl)}&userId=${encodeURIComponent(userId)}&amount=${encodeURIComponent(amount)}`;
+        // Try to get payment data from URL parameters first
+        function loadFromUrlParameters() {
+            const pollUrl = getUrlParameter('pollUrl') || '';
+            const userId = getUrlParameter('userId') || '';
+            const amount = getUrlParameter('amount') || '';
 
-        // Display deep link
-        document.getElementById('deepLink').textContent = deepLink;
+            if (pollUrl && userId) {
+                paymentData = { pollUrl, userId, amount };
+                deepLink = `mcubed://paynow-return?pollUrl=${encodeURIComponent(pollUrl)}&userId=${encodeURIComponent(userId)}&amount=${encodeURIComponent(amount)}`;
+                console.log('Loaded payment data from URL parameters');
+                return true;
+            }
+            return false;
+        }
+
+        // Try to get payment data from Firestore
+        async function loadFromFirestore() {
+            const paymentId = getUrlParameter('paymentId') || getUrlParameter('guid') || '';
+            
+            if (!paymentId) {
+                console.log('No payment ID found in URL');
+                return false;
+            }
+
+            if (!db) {
+                console.log('Firebase not initialized, skipping Firestore lookup');
+                return false;
+            }
+
+            try {
+                console.log('Fetching payment data for ID:', paymentId);
+                
+                // Try paymentReturns collection first
+                let doc = await db.collection('paymentReturns').doc(paymentId).get();
+                
+                if (!doc.exists) {
+                    // Try payments collection as fallback
+                    doc = await db.collection('payments').doc(paymentId).get();
+                }
+
+                if (doc.exists) {
+                    paymentData = doc.data();
+                    deepLink = `mcubed://paynow-return?pollUrl=${encodeURIComponent(paymentData.pollUrl || '')}&userId=${encodeURIComponent(paymentData.userId || '')}&amount=${encodeURIComponent(paymentData.amount || '')}`;
+                    
+                    console.log('Loaded payment data from Firestore:', paymentData);
+                    
+                    // Delete the return data after use
+                    if (doc.ref.path.includes('paymentReturns')) {
+                        await doc.ref.delete();
+                    }
+                    
+                    return true;
+                } else {
+                    console.log('Payment data not found in Firestore');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Error fetching payment data from Firestore:', error);
+                return false;
+            }
+        }
+
+        // Update UI with payment info
+        function showPaymentInfo() {
+            document.getElementById('loadingMessage').style.display = 'none';
+            document.getElementById('paymentInfo').style.display = 'block';
+            document.getElementById('openButton').style.display = 'inline-block';
+            document.getElementById('copyButton').style.display = 'inline-block';
+            document.getElementById('fallbackInfo').style.display = 'block';
+        }
+
+        // Show error message
+        function showError(message) {
+            document.getElementById('loadingMessage').style.display = 'none';
+            document.getElementById('errorMessage').innerHTML = `<strong>Error</strong><br>${message}`;
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('openButton').style.display = 'inline-block';
+            document.getElementById('copyButton').style.display = 'inline-block';
+            document.getElementById('fallbackInfo').style.display = 'block';
+        }
 
         // Function to open deep link
         function openDeepLink() {
+            if (!deepLink) {
+                showError('No payment data available');
+                return;
+            }
+            
+            console.log('Attempting to open deep link:', deepLink);
+            
+            // Try to open the deep link
             window.location.href = deepLink;
+            
+            // Show error message after 2 seconds if still on page
+            setTimeout(() => {
+                if (document.visibilityState === 'visible') {
+                    document.getElementById('errorMessage').style.display = 'block';
+                }
+            }, 2000);
         }
 
         // Function to copy link to clipboard
         function copyLink() {
+            if (!deepLink) {
+                showError('No link available to copy');
+                return;
+            }
+            
             navigator.clipboard.writeText(deepLink).then(() => {
                 alert('Link copied to clipboard!');
             }).catch(() => {
@@ -130,16 +264,37 @@
             });
         }
 
-        // Auto-redirect after 2 seconds
-        setTimeout(() => {
-            openDeepLink();
-        }, 2000);
+        // Main initialization
+        async function init() {
+            console.log('PayNow return page loaded');
+            
+            // Try URL parameters first
+            if (loadFromUrlParameters()) {
+                showPaymentInfo();
+                // Auto-redirect after 1 second
+                setTimeout(openDeepLink, 1000);
+                return;
+            }
+
+            // Try Firestore
+            if (await loadFromFirestore()) {
+                showPaymentInfo();
+                // Auto-redirect after 1 second
+                setTimeout(openDeepLink, 1000);
+                return;
+            }
+
+            // No payment data found
+            showError('Payment information not found. Please return to the app and try again.');
+        }
+
+        // Start the process
+        init();
 
         // Fallback: Check if user is still on this page after 5 seconds
         setTimeout(() => {
-            if (document.visibilityState === 'visible') {
-                document.querySelector('.instructions').innerHTML += 
-                    '<p style="color: #ffcc00;"><strong>Auto-redirect failed.</strong> Please use the button above or copy the link manually.</p>';
+            if (document.visibilityState === 'visible' && paymentData) {
+                document.getElementById('errorMessage').style.display = 'block';
             }
         }, 5000);
     </script>
