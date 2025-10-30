@@ -106,7 +106,7 @@
         <button class="button" onclick="openApp()">Open MCubed App</button>
 
         <div class="instructions" style="margin-top: 30px; font-size: 12px; opacity: 0.8;">
-            <p>This page will automatically close in 30 seconds.</p>
+            <p>Redirecting to MCubed app in <span id="countdown">5</span> seconds...</p>
         </div>
     </div>
 
@@ -161,7 +161,28 @@
             window.location.href = deepLink;
         }
 
-        // Auto-close page after 30 seconds
+        // Countdown timer
+        let countdown = 5;
+        const countdownElement = document.getElementById('countdown');
+        
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdownElement) {
+                countdownElement.textContent = countdown;
+            }
+            
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
+
+        // Auto-redirect to app after 5 seconds
+        setTimeout(() => {
+            console.log('Auto-redirecting to app after 5 seconds...');
+            openApp();
+        }, 5000);
+
+        // Auto-close page after 30 seconds as backup
         setTimeout(() => {
             window.close();
             // Try to close window, if not possible, redirect to app
